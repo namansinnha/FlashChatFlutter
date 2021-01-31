@@ -3,6 +3,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flash_chat/constants.dart';
 import 'package:flutter/material.dart';
 
+final _firestore = Firestore.instance;
+FirebaseUser loggedInUser;
+
 class ChatScreen extends StatefulWidget {
   static const String id = 'chat_screen';
 
@@ -12,8 +15,7 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   final _auth = FirebaseAuth.instance;
-  final _firestore = Firestore.instance;
-  FirebaseUser loggedInUser;
+
   String messageText;
 
   @override
@@ -35,13 +37,12 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  void getMessages() {}
-
   @override
   Widget build(BuildContext context) {
     FirebaseAuth _auth = FirebaseAuth.instance;
-
+    final messageController = TextEditingController();
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
         leading: null,
         actions: <Widget>[
@@ -60,6 +61,7 @@ class _ChatScreenState extends State<ChatScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
+            MessagesStream(),
             Container(
               decoration: kMessageContainerDecoration,
               child: Row(
@@ -67,6 +69,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 children: <Widget>[
                   Expanded(
                     child: TextField(
+                      controller: messageController,
                       onChanged: (value) {
                         messageText = value;
                       },
@@ -75,6 +78,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   ),
                   FlatButton(
                     onPressed: () {
+                      messageController.clear();
                       _firestore.collection('messages').add(
                         {'text': messageText, 'sender': loggedInUser.email},
                       );
@@ -89,6 +93,100 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class MessagesStream extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _firestore.collection('messages').snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return Center(
+            child: CircularProgressIndicator(
+              backgroundColor: Colors.lightBlueAccent,
+            ),
+          );
+        }
+        final messages = snapshot.data.documents.reversed;
+        List<MessageBubble> messageBubbles = [];
+        for (var message in messages) {
+          final messageText = message.data['text'];
+          final messageSender = message.data['sender'];
+
+          final currentUser = loggedInUser.email;
+          final messageBubble = MessageBubble(
+            text: messageText,
+            sender: messageSender,
+            isMe: currentUser == messageSender,
+          );
+          messageBubbles.add(messageBubble);
+        }
+        return Expanded(
+          child: ListView(
+            reverse: true,
+            padding: EdgeInsets.symmetric(horizontal: 10.0, vertical: 20.0),
+            children: messageBubbles,
+          ),
+        );
+      },
+    );
+  }
+}
+
+class MessageBubble extends StatelessWidget {
+  final String sender;
+  final String text;
+  final bool isMe;
+
+  MessageBubble({this.sender, this.text, this.isMe});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.all(10.0),
+      child: Column(
+        crossAxisAlignment:
+            isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        children: [
+          Text(
+            sender,
+            style: TextStyle(
+                color: Colors.grey.shade400,
+                fontSize: 12.0,
+                fontWeight: FontWeight.bold),
+          ),
+          Material(
+            borderRadius: isMe
+                ? BorderRadius.only(
+                    topLeft: Radius.circular(30),
+                    bottomLeft: Radius.circular(30),
+                    bottomRight: Radius.circular(30),
+                    topRight: Radius.zero,
+                  )
+                : BorderRadius.only(
+                    topLeft: Radius.zero,
+                    bottomLeft: Radius.circular(30),
+                    bottomRight: Radius.circular(30),
+                    topRight: Radius.circular(30),
+                  ),
+            elevation: 8.0,
+            color: isMe ? Colors.lightBlueAccent : Colors.white,
+            child: Padding(
+              padding: EdgeInsets.symmetric(vertical: 10.0, horizontal: 20.0),
+              child: Text(
+                text,
+                style: TextStyle(
+                    fontSize: 18.0,
+                    fontWeight: FontWeight.bold,
+                    color: isMe ? Colors.white : Colors.black),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
